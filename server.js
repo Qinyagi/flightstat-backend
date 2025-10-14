@@ -148,4 +148,5 @@ app.listen(PORT, () => {
   console.log(`🌐 Health check: http://localhost:${PORT}/`);
   console.log(`✈️ API endpoint: http://localhost:${PORT}/api/flights`);
   console.log(`📊 Ready for Railway deployment!`);
+
 });
