@@ -13,11 +13,14 @@ app.use(cors({
   origin: [
     'http://localhost:3000',
     'https://localhost:3000', 
-    /https:\/\/.*\.netlify\.app$/,
-    /https:\/\/.*\.netlify\.com$/
+    'https://tourmaline-rugelach-ecc573.netlify.app',  // Deine spezifische Netlify URL
+    'https://courageous-gnome-18ce7b.netlify.app',     // Alte URL (falls noch verwendet)
+    /https:\/\/.*\.netlify\.app$/,                     // Alle .netlify.app URLs
+    /https:\/\/.*\.netlify\.com$/                      // Alle .netlify.com URLs
   ],
   credentials: true
 }));
+
 
 // Parse JSON bodies
 app.use(express.json());
@@ -248,3 +251,4 @@ app.listen(PORT, () => {
   console.log(`✈️ API endpoint: http://localhost:${PORT}/api/flights`);
   console.log(`📊 Ready for Railway deployment! FIXED VERSION`);
 });
+
