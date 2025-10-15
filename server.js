@@ -1,4 +1,4 @@
-// FlightStat Bot 2025 - Railway Backend Server - CHATGPT CORS FIX
+// FlightStat Bot 2025 - Railway Backend Server - CHATGPT CORS FIX V2
 // API Proxy for FlightAware to bypass CORS restrictions
 
 const express = require('express');
@@ -8,7 +8,7 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// 1) ROBUST CORS CONFIGURATION - ChatGPT Fix
+// ROBUST CORS CONFIGURATION - ChatGPT Fix V2
 const allowList = new Set([
   'https://tourmaline-rugelach-ecc573.netlify.app',
   'https://courageous-gnome-18ce7b.netlify.app',
@@ -16,31 +16,36 @@ const allowList = new Set([
   'https://localhost:3000'
 ]);
 
+const isAllowedOrigin = (origin) => {
+  if (!origin) return false;
+  try {
+    const u = new URL(origin);
+    return allowList.has(origin) || /\.netlify\.app$/.test(u.host);
+  } catch { return false; }
+};
+
 const corsOptionsDelegate = (req, cb) => {
   const origin = req.header('Origin') || '';
-  const isAllowed = 
-    allowList.has(origin) ||
-    /\.netlify\.app$/.test(new URL(origin || 'http://localhost').host);
-  
+  const allowed = isAllowedOrigin(origin);
   cb(null, {
-    origin: isAllowed,           // wichtig: true/false, nicht "*"
-    credentials: false,          // keine Cookies
+    origin: allowed,                // true/false -> cors spiegelt Origin automatisch
+    credentials: false,             // keine Cookies nötig
     methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-    allowedHeaders: ['Content-Type','Authorization','x-apikey'],
-    maxAge: 86400,               // Preflight-Caching (1 Tag)
+    // WICHTIG: allowedHeaders WEG LASSEN -> cors spiegelt Access-Control-Request-Headers
+    maxAge: 86400,
   });
 };
 
-// 2) Preflight-Gesuche *vor* allen Routen bedienen
+// Preflight zuerst
 app.options('*', cors(corsOptionsDelegate));
 
-// 3) CORS global *vor* allen Routern aktivieren
+// Global aktivieren
 app.use(cors(corsOptionsDelegate));
 
-// 4) "Vary: Origin" setzen
-app.use((req, res, next) => { 
-  if (req.headers.origin) res.set('Vary','Origin'); 
-  next(); 
+// Vary: Origin für Proxies
+app.use((req, res, next) => {
+  if (req.headers.origin) res.set('Vary', 'Origin');
+  next();
 });
 
 // Parse JSON bodies
@@ -73,8 +78,8 @@ const iataToIcao = {
 // Health check endpoint
 app.get('/', (req, res) => {
   res.json({
-    status: 'FlightStat Backend API is running! 🚀 CHATGPT CORS FIX',
-    version: '1.3.0',
+    status: 'FlightStat Backend API is running! 🚀 CHATGPT CORS FIX V2',
+    version: '1.4.0',
     timestamp: new Date().toISOString(),
     endpoints: {
       flights: '/api/flights?airport=XXX&key=YOUR_API_KEY',
@@ -83,7 +88,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// FlightAware API Proxy endpoint - SECURE VERSION
+// FlightAware API Proxy endpoint
 app.get('/api/flights', async (req, res, next) => {
   try {
     const airport = (req.query.airport || '').toString().toUpperCase();
@@ -183,7 +188,7 @@ app.get('/api/flights', async (req, res, next) => {
       timestamp: new Date().toISOString(),
       meta: {
         total: processedFlights.length,
-        source: 'FlightAware API via Railway Backend CHATGPT FIX',
+        source: 'FlightAware API via Railway Backend CHATGPT FIX V2',
         user: user
       }
     };
@@ -196,19 +201,17 @@ app.get('/api/flights', async (req, res, next) => {
   }
 });
 
-// 5) Fehler-Handler *zum Schluss* – setzt CORS auch auf Fehlerantworten
+// Fehler-Handler NACH allen Routen
 app.use((err, req, res, next) => {
-  // CORS nochmals absichern
   const origin = req.header('Origin');
-  if (origin && (allowList.has(origin) || /\.netlify\.app$/.test(new URL(origin).host))) {
+  if (isAllowedOrigin(origin)) {
     res.set('Access-Control-Allow-Origin', origin);
-    res.set('Access-Control-Allow-Credentials', 'false');
-    res.set('Vary','Origin');
+    res.set('Vary', 'Origin');
+    // KEIN Access-Control-Allow-Credentials hier setzen (nur wenn true nötig ist)
   }
   
   console.error('❌ Backend Error:', err.message);
   
-  // Fallback to demo data on error
   const demoFlights = [
     {
       id: 'demo-1',
@@ -225,6 +228,38 @@ app.use((err, req, res, next) => {
       progress_percent: 75,
       isMonitored: false,
       isNewOrUpdated: true
+    },
+    {
+      id: 'demo-2',
+      ident: 'UA789',
+      callsign: 'UAL789',
+      registration: 'N12345',
+      aircraft_type: 'B787-9',
+      operator: 'UAL',
+      operator_iata: 'UA',
+      origin: { code: 'KSFO', name: 'San Francisco International', city: 'San Francisco' },
+      scheduled_in: new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString(),
+      estimated_in: new Date(Date.now() + 1.5 * 60 * 60 * 1000).toISOString(),
+      status: 'En Route',
+      progress_percent: 85,
+      isMonitored: false,
+      isNewOrUpdated: false
+    },
+    {
+      id: 'demo-3',
+      ident: 'EW123',
+      callsign: 'EWG123',
+      registration: 'D-CGNE',
+      aircraft_type: 'A320-200',
+      operator: 'EWG',
+      operator_iata: 'EW',
+      origin: { code: 'LEPA', name: 'Palma de Mallorca', city: 'Palma' },
+      scheduled_in: new Date(Date.now() + 0.5 * 60 * 60 * 1000).toISOString(),
+      estimated_in: new Date(Date.now() + 0.75 * 60 * 60 * 1000).toISOString(),
+      status: 'Approach',
+      progress_percent: 95,
+      isMonitored: false,
+      isNewOrUpdated: true
     }
   ];
 
@@ -235,7 +270,7 @@ app.use((err, req, res, next) => {
     timestamp: new Date().toISOString(),
     meta: {
       total: demoFlights.length,
-      source: 'Demo Data (FlightAware API error) - CHATGPT FIX',
+      source: 'Demo Data (FlightAware API error) - CHATGPT FIX V2',
       user: req.query.user || 'unknown',
       note: 'Using demo data due to API error'
     }
@@ -244,8 +279,8 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 FlightStat Backend CHATGPT CORS FIX running on port ${PORT}`);
+  console.log(`🚀 FlightStat Backend CHATGPT CORS FIX V2 running on port ${PORT}`);
   console.log(`🌐 Health check: http://localhost:${PORT}/`);
   console.log(`✈️ API endpoint: http://localhost:${PORT}/api/flights`);
-  console.log(`📊 Ready for Railway deployment! CHATGPT FIX`);
+  console.log(`📊 Ready for Railway deployment! CHATGPT FIX V2`);
 });
