@@ -1,4 +1,4 @@
-// FlightStat Bot 2025 - Railway Backend Server - FIXED VERSION
+// FlightStat Bot 2025 - Railway Backend Server - FINAL VERSION WITH CORS FIX
 // API Proxy for FlightAware to bypass CORS restrictions
 
 const express = require('express');
@@ -8,19 +8,20 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// CORS configuration - allow requests from Netlify
+// CORS configuration - FIXED for all Netlify URLs
 app.use(cors({
   origin: [
     'http://localhost:3000',
     'https://localhost:3000', 
-    'https://tourmaline-rugelach-ecc573.netlify.app',  // Deine spezifische Netlify URL
+    'https://tourmaline-rugelach-ecc573.netlify.app',  // Deine aktuelle Netlify URL
     'https://courageous-gnome-18ce7b.netlify.app',     // Alte URL (falls noch verwendet)
     /https:\/\/.*\.netlify\.app$/,                     // Alle .netlify.app URLs
     /https:\/\/.*\.netlify\.com$/                      // Alle .netlify.com URLs
   ],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-apikey']
 }));
-
 
 // Parse JSON bodies
 app.use(express.json());
@@ -28,8 +29,8 @@ app.use(express.json());
 // Health check endpoint
 app.get('/', (req, res) => {
   res.json({
-    status: 'FlightStat Backend API is running! 🚀 FIXED VERSION',
-    version: '1.1.0',
+    status: 'FlightStat Backend API is running! 🚀 CORS FIXED VERSION',
+    version: '1.2.0',
     timestamp: new Date().toISOString(),
     endpoints: {
       flights: '/api/flights?airport=XXX&key=YOUR_API_KEY',
@@ -154,7 +155,7 @@ app.get('/api/flights', async (req, res) => {
       timestamp: new Date().toISOString(),
       meta: {
         total: processedFlights.length,
-        source: 'FlightAware API via Railway Backend FIXED',
+        source: 'FlightAware API via Railway Backend CORS FIXED',
         user: user || 'unknown'
       }
     };
@@ -226,7 +227,7 @@ app.get('/api/flights', async (req, res) => {
       timestamp: new Date().toISOString(),
       meta: {
         total: demoFlights.length,
-        source: 'Demo Data (FlightAware API blocked by Railway) - FIXED VERSION',
+        source: 'Demo Data (FlightAware API blocked by Railway) - CORS FIXED VERSION',
         user: user || 'unknown',
         note: 'FlightAware blocks Railway servers - using demo data'
       }
@@ -246,9 +247,8 @@ app.use((error, req, res, next) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 FlightStat Backend FIXED running on port ${PORT}`);
+  console.log(`🚀 FlightStat Backend CORS FIXED running on port ${PORT}`);
   console.log(`🌐 Health check: http://localhost:${PORT}/`);
   console.log(`✈️ API endpoint: http://localhost:${PORT}/api/flights`);
-  console.log(`📊 Ready for Railway deployment! FIXED VERSION`);
+  console.log(`📊 Ready for Railway deployment! CORS FIXED VERSION`);
 });
-
