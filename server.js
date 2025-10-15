@@ -1,4 +1,4 @@
-// FlightStat Bot 2025 - Railway Backend Server - FINAL VERSION WITH CORS FIX
+// FlightStat Bot 2025 - Railway Backend Server - CHATGPT CORS FIX
 // API Proxy for FlightAware to bypass CORS restrictions
 
 const express = require('express');
@@ -8,29 +8,73 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// CORS configuration - FIXED for all Netlify URLs
-app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'https://localhost:3000', 
-    'https://tourmaline-rugelach-ecc573.netlify.app',  // Deine aktuelle Netlify URL
-    'https://courageous-gnome-18ce7b.netlify.app',     // Alte URL (falls noch verwendet)
-    /https:\/\/.*\.netlify\.app$/,                     // Alle .netlify.app URLs
-    /https:\/\/.*\.netlify\.com$/                      // Alle .netlify.com URLs
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-apikey']
-}));
+// 1) ROBUST CORS CONFIGURATION - ChatGPT Fix
+const allowList = new Set([
+  'https://tourmaline-rugelach-ecc573.netlify.app',
+  'https://courageous-gnome-18ce7b.netlify.app',
+  'http://localhost:3000',
+  'https://localhost:3000'
+]);
+
+const corsOptionsDelegate = (req, cb) => {
+  const origin = req.header('Origin') || '';
+  const isAllowed = 
+    allowList.has(origin) ||
+    /\.netlify\.app$/.test(new URL(origin || 'http://localhost').host);
+  
+  cb(null, {
+    origin: isAllowed,           // wichtig: true/false, nicht "*"
+    credentials: false,          // keine Cookies
+    methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+    allowedHeaders: ['Content-Type','Authorization','x-apikey'],
+    maxAge: 86400,               // Preflight-Caching (1 Tag)
+  });
+};
+
+// 2) Preflight-Gesuche *vor* allen Routen bedienen
+app.options('*', cors(corsOptionsDelegate));
+
+// 3) CORS global *vor* allen Routern aktivieren
+app.use(cors(corsOptionsDelegate));
+
+// 4) "Vary: Origin" setzen
+app.use((req, res, next) => { 
+  if (req.headers.origin) res.set('Vary','Origin'); 
+  next(); 
+});
 
 // Parse JSON bodies
 app.use(express.json());
 
+// ICAO Mapping
+const iataToIcao = {
+  'CGN': 'EDDK',  // Cologne/Bonn
+  'FRA': 'EDDF',  // Frankfurt
+  'MUC': 'EDDM',  // Munich
+  'DUS': 'EDDL',  // Düsseldorf
+  'HAM': 'EDDH',  // Hamburg
+  'BER': 'EDDB',  // Berlin Brandenburg
+  'STR': 'EDDS',  // Stuttgart
+  'NUE': 'EDDN',  // Nuremberg
+  'HAJ': 'EDDV',  // Hannover
+  'BRE': 'EDDW',  // Bremen
+  'JFK': 'KJFK',  // New York JFK
+  'LAX': 'KLAX',  // Los Angeles
+  'LHR': 'EGLL',  // London Heathrow
+  'CDG': 'LFPG',  // Paris Charles de Gaulle
+  'AMS': 'EHAM',  // Amsterdam
+  'ZUR': 'LSZH',  // Zurich
+  'VIE': 'LOWW',  // Vienna
+  'FCO': 'LIRF',  // Rome Fiumicino
+  'MAD': 'LEMD',  // Madrid
+  'BCN': 'LEBL'   // Barcelona
+};
+
 // Health check endpoint
 app.get('/', (req, res) => {
   res.json({
-    status: 'FlightStat Backend API is running! 🚀 CORS FIXED VERSION',
-    version: '1.2.0',
+    status: 'FlightStat Backend API is running! 🚀 CHATGPT CORS FIX',
+    version: '1.3.0',
     timestamp: new Date().toISOString(),
     endpoints: {
       flights: '/api/flights?airport=XXX&key=YOUR_API_KEY',
@@ -39,55 +83,41 @@ app.get('/', (req, res) => {
   });
 });
 
-// FlightAware API Proxy endpoint
-app.get('/api/flights', async (req, res) => {
+// FlightAware API Proxy endpoint - SECURE VERSION
+app.get('/api/flights', async (req, res, next) => {
   try {
-    const { airport, key, user } = req.query;
+    const airport = (req.query.airport || '').toString().toUpperCase();
+    const key = req.query.key; // In production: process.env.FLIGHTAWARE_API_KEY
+    const user = req.query.user || 'unknown';
     
     // Validate required parameters
-    if (!airport || !key) {
+    if (!airport) {
       return res.status(400).json({
         success: false,
         error: 'Missing required parameters',
-        details: 'Both airport and key parameters are required'
+        details: 'Airport parameter is required'
       });
     }
 
-    // Log request (without exposing full API key)
-    const maskedKey = key.substring(0, 8) + '***' + key.substring(key.length - 4);
-    console.log(`🛫 Flight request: ${airport} (User: ${user || 'unknown'}, Key: ${maskedKey})`);
+    if (!key) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing API key',
+        details: 'FlightAware API key is required'
+      });
+    }
 
-    // Convert IATA to ICAO airport codes (FlightAware requires ICAO)
-    const iataToIcao = {
-      'CGN': 'EDDK',  // Cologne/Bonn
-      'FRA': 'EDDF',  // Frankfurt
-      'MUC': 'EDDM',  // Munich
-      'DUS': 'EDDL',  // Düsseldorf
-      'HAM': 'EDDH',  // Hamburg
-      'BER': 'EDDB',  // Berlin Brandenburg
-      'STR': 'EDDS',  // Stuttgart
-      'NUE': 'EDDN',  // Nuremberg
-      'HAJ': 'EDDV',  // Hannover
-      'BRE': 'EDDW',  // Bremen
-      'JFK': 'KJFK',  // New York JFK
-      'LAX': 'KLAX',  // Los Angeles
-      'LHR': 'EGLL',  // London Heathrow
-      'CDG': 'LFPG',  // Paris Charles de Gaulle
-      'AMS': 'EHAM',  // Amsterdam
-      'ZUR': 'LSZH',  // Zurich
-      'VIE': 'LOWW',  // Vienna
-      'FCO': 'LIRF',  // Rome Fiumicino
-      'MAD': 'LEMD',  // Madrid
-      'BCN': 'LEBL'   // Barcelona
-    };
-    
-    // Use ICAO code if available, otherwise use original airport code
-    const icaoCode = iataToIcao[airport.toUpperCase()] || airport;
+    // Convert IATA to ICAO
+    const icaoCode = iataToIcao[airport] || airport;
     console.log(`🔄 Converting ${airport} → ${icaoCode} (ICAO format for FlightAware)`);
 
-    // Build FlightAware API URL with 18-hour window (6h back for extreme delays + 12h forward)
+    // Log request (without exposing full API key)
+    const maskedKey = key.substring(0, 8) + '***' + key.substring(key.length - 4);
+    console.log(`🛫 Flight request: ${airport} (User: ${user}, Key: ${maskedKey})`);
+
+    // Build FlightAware API URL
     const now = new Date();
-    const startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000);   // 6 hours ago (for extreme delays)
+    const startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000);   // 6 hours ago
     const endTime = new Date(now.getTime() + 12 * 60 * 60 * 1000);    // 12 hours from now
     
     const flightAwareUrl = `https://aeroapi.flightaware.com/aeroapi/airports/${icaoCode}/flights/arrivals?start=${startTime.toISOString()}&end=${endTime.toISOString()}&max_pages=3`;
@@ -107,11 +137,10 @@ app.get('/api/flights', async (req, res) => {
 
     const data = await response.json();
     
-    // Process and filter flights (same logic as frontend)
+    // Process flights
     const processedFlights = (data.arrivals || [])
       .filter(flight => {
         const status = flight.status?.toLowerCase() || '';
-        // Focus on flights that are coming to CGN (18-hour rolling window)
         return status.includes('en route') || 
                status.includes('approach') || 
                status.includes('final') ||
@@ -121,8 +150,7 @@ app.get('/api/flights', async (req, res) => {
                status.includes('climbing') ||
                status.includes('cruising') ||
                status.includes('descending') ||
-               status.includes('diverted');  // Include diverted flights (important info!)
-        // Exclude: 'landed', 'arrived', 'cancelled'
+               status.includes('diverted');
       })
       .slice(0, 50)
       .map((flight, index) => ({
@@ -155,8 +183,8 @@ app.get('/api/flights', async (req, res) => {
       timestamp: new Date().toISOString(),
       meta: {
         total: processedFlights.length,
-        source: 'FlightAware API via Railway Backend CORS FIXED',
-        user: user || 'unknown'
+        source: 'FlightAware API via Railway Backend CHATGPT FIX',
+        user: user
       }
     };
 
@@ -164,91 +192,60 @@ app.get('/api/flights', async (req, res) => {
     res.json(result);
 
   } catch (error) {
-    console.error('❌ Backend Error:', error.message);
-    console.log('🔄 Falling back to demo data due to FlightAware API restrictions');
-    
-    // Fallback to demo data when FlightAware API fails
-    const demoFlights = [
-      {
-        id: 'demo-1',
-        ident: 'LH441',
-        callsign: 'DLH441',
-        registration: 'D-AIXA',
-        aircraft_type: 'A350-900',
-        operator: 'DLH',
-        operator_iata: 'LH',
-        origin: { code: 'KJFK', name: 'John F. Kennedy International', city: 'New York' },
-        scheduled_in: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-        estimated_in: new Date(Date.now() + 2.25 * 60 * 60 * 1000).toISOString(),
-        status: 'En Route',
-        progress_percent: 75,
-        isMonitored: false,
-        isNewOrUpdated: true
-      },
-      {
-        id: 'demo-2',
-        ident: 'UA789',
-        callsign: 'UAL789',
-        registration: 'N12345',
-        aircraft_type: 'B787-9',
-        operator: 'UAL',
-        operator_iata: 'UA',
-        origin: { code: 'KSFO', name: 'San Francisco International', city: 'San Francisco' },
-        scheduled_in: new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString(),
-        estimated_in: new Date(Date.now() + 1.5 * 60 * 60 * 1000).toISOString(),
-        status: 'En Route',
-        progress_percent: 85,
-        isMonitored: false,
-        isNewOrUpdated: false
-      },
-      {
-        id: 'demo-3',
-        ident: 'EW123',
-        callsign: 'EWG123',
-        registration: 'D-CGNE',
-        aircraft_type: 'A320-200',
-        operator: 'EWG',
-        operator_iata: 'EW',
-        origin: { code: 'LEPA', name: 'Palma de Mallorca', city: 'Palma' },
-        scheduled_in: new Date(Date.now() + 0.5 * 60 * 60 * 1000).toISOString(),
-        estimated_in: new Date(Date.now() + 0.75 * 60 * 60 * 1000).toISOString(),
-        status: 'Approach',
-        progress_percent: 95,
-        isMonitored: false,
-        isNewOrUpdated: true
-      }
-    ];
-
-    // Return demo data as successful response
-    res.json({
-      success: true,
-      flights: demoFlights,
-      airport: airport,
-      timestamp: new Date().toISOString(),
-      meta: {
-        total: demoFlights.length,
-        source: 'Demo Data (FlightAware API blocked by Railway) - CORS FIXED VERSION',
-        user: user || 'unknown',
-        note: 'FlightAware blocks Railway servers - using demo data'
-      }
-    });
+    next(error); // Let error handler deal with it
   }
 });
 
-// Error handling middleware
-app.use((error, req, res, next) => {
-  console.error('❌ Unhandled Error:', error);
-  res.status(500).json({
-    success: false,
-    error: 'Internal server error',
-    details: error.message
+// 5) Fehler-Handler *zum Schluss* – setzt CORS auch auf Fehlerantworten
+app.use((err, req, res, next) => {
+  // CORS nochmals absichern
+  const origin = req.header('Origin');
+  if (origin && (allowList.has(origin) || /\.netlify\.app$/.test(new URL(origin).host))) {
+    res.set('Access-Control-Allow-Origin', origin);
+    res.set('Access-Control-Allow-Credentials', 'false');
+    res.set('Vary','Origin');
+  }
+  
+  console.error('❌ Backend Error:', err.message);
+  
+  // Fallback to demo data on error
+  const demoFlights = [
+    {
+      id: 'demo-1',
+      ident: 'LH441',
+      callsign: 'DLH441',
+      registration: 'D-AIXA',
+      aircraft_type: 'A350-900',
+      operator: 'DLH',
+      operator_iata: 'LH',
+      origin: { code: 'KJFK', name: 'John F. Kennedy International', city: 'New York' },
+      scheduled_in: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      estimated_in: new Date(Date.now() + 2.25 * 60 * 60 * 1000).toISOString(),
+      status: 'En Route',
+      progress_percent: 75,
+      isMonitored: false,
+      isNewOrUpdated: true
+    }
+  ];
+
+  res.status(err.status || 500).json({
+    success: true, // Return as success with demo data
+    flights: demoFlights,
+    airport: req.query.airport || 'CGN',
+    timestamp: new Date().toISOString(),
+    meta: {
+      total: demoFlights.length,
+      source: 'Demo Data (FlightAware API error) - CHATGPT FIX',
+      user: req.query.user || 'unknown',
+      note: 'Using demo data due to API error'
+    }
   });
 });
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 FlightStat Backend CORS FIXED running on port ${PORT}`);
+  console.log(`🚀 FlightStat Backend CHATGPT CORS FIX running on port ${PORT}`);
   console.log(`🌐 Health check: http://localhost:${PORT}/`);
   console.log(`✈️ API endpoint: http://localhost:${PORT}/api/flights`);
-  console.log(`📊 Ready for Railway deployment! CORS FIXED VERSION`);
+  console.log(`📊 Ready for Railway deployment! CHATGPT FIX`);
 });
