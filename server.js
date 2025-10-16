@@ -10,6 +10,9 @@ const PORT = process.env.PORT || 3001;
 
 // ROBUST CORS CONFIGURATION - ChatGPT Fix V2
 const allowList = new Set([
+  'https://sensational-entremet-00d330.netlify.app',
+  'https://gentle-starship-f7e194.netlify.app',
+  'https://grand-nasturtium-d134ae.netlify.app',
   'https://tourmaline-rugelach-ecc573.netlify.app',
   'https://courageous-gnome-18ce7b.netlify.app',
   'http://localhost:3000',
