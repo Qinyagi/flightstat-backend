@@ -124,6 +124,7 @@ app.get('/api/flights', async (req, res, next) => {
     // Log request (without exposing full API key)
     const maskedKey = key.substring(0, 8) + '***' + key.substring(key.length - 4);
     console.log(`🛫 Flight request: ${airport} (User: ${user}, Key: ${maskedKey})`);
+    console.log(`🔗 FlightAware URL: ${flightAwareUrl}`);
 
     // Build FlightAware API URL
     const now = new Date();
