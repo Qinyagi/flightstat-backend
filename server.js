@@ -142,7 +142,10 @@ app.get('/api/flights', async (req, res, next) => {
     });
 
     if (!response.ok) {
-      throw new Error(`FlightAware API error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error(`❌ FlightAware API Error: ${response.status} ${response.statusText}`);
+      console.error(`❌ Error Details: ${errorText}`);
+      throw new Error(`FlightAware API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json();
