@@ -13,7 +13,8 @@ const PORT = process.env.PORT || 3001;
 const allowList = new Set([
   'https://out-p3pyuojgj-hakans-projects-96ef8546.vercel.app', // OLD Vercel URL
   'https://flightstat-fixed-fsct3i8kg-hakans-projects-96ef8546.vercel.app', // OLD Fixed URL
-  'https://flightstat-fixed25-9a23nyepy-hakans-projects-96ef8546.vercel.app', // NEW Fixed URL - CORS FIX
+  'https://flightstat-fixed25-9a23nyepy-hakans-projects-96ef8546.vercel.app', // Fixed URL v1
+  'https://flightstat-fixed25-86891kbif-hakans-projects-96ef8546.vercel.app', // Fixed URL v2 - MODAL FIX
   'http://localhost:3000',
   'https://localhost:3000'
 ]);
