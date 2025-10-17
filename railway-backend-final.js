@@ -15,6 +15,7 @@ const allowList = new Set([
   'https://flightstat-fixed-fsct3i8kg-hakans-projects-96ef8546.vercel.app', // OLD Fixed URL
   'https://flightstat-fixed25-9a23nyepy-hakans-projects-96ef8546.vercel.app', // Fixed URL v1
   'https://flightstat-fixed25-86891kbif-hakans-projects-96ef8546.vercel.app', // Fixed URL v2 - MODAL FIX
+  'https://out-modal-aqhdfxpkl-hakans-projects-96ef8546.vercel.app', // PERFECT MODAL CENTERING
   'http://localhost:3000',
   'https://localhost:3000'
 ]);
