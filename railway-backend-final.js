@@ -1,6 +1,6 @@
 // FlightStat Bot 2025 - Railway Backend Server - CHATGPT HOTFIX
 // API Proxy for FlightAware to bypass CORS restrictions
-// SOLUTION: Time window validation + AeroAPI spec compliance
+// SOLUTION: ISO Format Fix - Remove milliseconds from timestamps
 
 const express = require('express');
 const cors = require('cors');
@@ -47,8 +47,8 @@ app.use(express.json());
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
-    status: 'FlightStat Backend API is running! 🚀 CHATGPT HOTFIX - Time Window Validation',
-    version: '1.8.0',
+    status: 'FlightStat Backend API is running! 🚀 CHATGPT HOTFIX - ISO Format Fix',
+    version: '1.8.1',
     timestamp: new Date().toISOString(),
     environment: {
       hasApiKey: !!process.env.AEROAPI_KEY,
@@ -65,8 +65,8 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     message: 'FlightStat Bot Railway Backend - CHATGPT HOTFIX',
-    version: '1.8.0',
-    fix: 'Time window validation: proper start<end ordering + AeroAPI spec compliance',
+    version: '1.8.1',
+    fix: 'ISO format fix: removed milliseconds from timestamp (FlightAware compatibility)',
     endpoints: {
       health: '/health',
       flights: '/api/flights?airport=ICAO&user=username',
@@ -75,7 +75,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// FlightAware API Proxy endpoint - CHATGPT HOTFIX (Time Window Validation)
+// FlightAware API Proxy endpoint - CHATGPT HOTFIX (ISO Format Fix)
 app.get('/api/flights', async (req, res) => {
   const airport = (req.query.airport || '').toString().toUpperCase();
   const user = req.query.user || 'unknown';
@@ -121,20 +121,25 @@ app.get('/api/flights', async (req, res) => {
   const schedStart = clamp(new Date(now)); // ab jetzt
   const schedEnd   = clamp(wantEnd);
 
-  // ✨ 2) Start < End sicherstellen (sonst 400)
+  // ✨ 2) Start < End sicherstellen (sonst 400) + Format Fix
   const ensureOrder = (s, e) => (s < e) ? [s, e] : [new Date(e), new Date(new Date(e).getTime() + 60*1000)];
   const [aS, aE] = ensureOrder(arrStart, arrEnd);
   const [sS, sE] = ensureOrder(schedStart, schedEnd);
+  
+  // ✨ 3) FlightAware Format Fix - Remove milliseconds from ISO string
+  const formatForFlightAware = (date) => {
+    return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  };
 
-  console.log(`🕐 Arrivals Range (Fixed): ${aS.toISOString()} to ${aE.toISOString()}`);
-  console.log(`🕐 Scheduled Range (Fixed): ${sS.toISOString()} to ${sE.toISOString()}`);
+  console.log(`🕐 Arrivals Range (Fixed): ${formatForFlightAware(aS)} to ${formatForFlightAware(aE)}`);
+  console.log(`🕐 Scheduled Range (Fixed): ${formatForFlightAware(sS)} to ${formatForFlightAware(sE)}`);
 
   const base = 'https://aeroapi.flightaware.com/aeroapi';
   const H = { 'x-apikey': key, 'Accept': 'application/json; charset=UTF-8' };
 
   const urls = [
-    `${base}/airports/${airport}/flights/arrivals?start=${aS.toISOString()}&end=${aE.toISOString()}&max_pages=3`,
-    `${base}/airports/${airport}/flights/scheduled_arrivals?start=${sS.toISOString()}&end=${sE.toISOString()}&max_pages=3`
+    `${base}/airports/${airport}/flights/arrivals?start=${formatForFlightAware(aS)}&end=${formatForFlightAware(aE)}&max_pages=3`,
+    `${base}/airports/${airport}/flights/scheduled_arrivals?start=${formatForFlightAware(sS)}&end=${formatForFlightAware(sE)}&max_pages=3`
   ];
 
   console.log(`🌐 FlightAware Requests (Hotfix):`);
@@ -160,7 +165,7 @@ app.get('/api/flights', async (req, res) => {
       console.log(`   Scheduled Error:`, b2);
       return res.status(Math.max(s1,s2)).json({
         success: false,
-        source: 'AeroAPI - CHATGPT HOTFIX',
+        source: 'AeroAPI - CHATGPT HOTFIX v1.8.1',
         errors: [ pick(r1.status, b1, 'arrivals'), pick(r2.status, b2, 'scheduled_arrivals') ]
       });
     }
@@ -225,7 +230,7 @@ app.get('/api/flights', async (req, res) => {
         arrived: arrivedFlights.length,
         scheduled: futureFlights.length,
         airport, 
-        source: 'AeroAPI (arrivals+scheduled_arrivals) - CHATGPT HOTFIX', 
+        source: 'AeroAPI (arrivals+scheduled_arrivals) - CHATGPT HOTFIX v1.8.1', 
         user,
         timestamp: new Date().toISOString()
       }
@@ -237,7 +242,7 @@ app.get('/api/flights', async (req, res) => {
       success: false, 
       error: 'Upstream fetch failed', 
       detail: String(e),
-      source: 'CHATGPT HOTFIX'
+      source: 'CHATGPT HOTFIX v1.8.1'
     });
   }
 });
