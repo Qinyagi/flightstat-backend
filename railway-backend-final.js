@@ -75,13 +75,31 @@ app.get('/api/flights', async (req, res) => {
   const key = process.env.AEROAPI_KEY; // ← Secret from Railway Environment
   
   console.log(`🛩️  Flight Request: airport=${airport}, user=${user}, hasKey=${!!key}`);
+  console.log(`🔍 DEBUG: req.query =`, req.query);
+  console.log(`🔍 DEBUG: airport length = ${airport.length}`);
+  
+  // DEBUG: Return debug info first
+  if (req.query.debug === 'true') {
+    return res.json({
+      debug: true,
+      airport: airport,
+      user: user,
+      hasKey: !!key,
+      query: req.query,
+      airportLength: airport.length
+    });
+  }
   
   // Validate required parameters
   if (!airport) {
     console.log('❌ Missing airport parameter');
     return res.status(400).json({
       error: 'Missing required parameter: airport (ICAO code)',
-      example: '/api/flights?airport=EDDK&user=testuser'
+      example: '/api/flights?airport=EDDK&user=testuser',
+      received: {
+        airport: airport,
+        query: req.query
+      }
     });
   }
 
