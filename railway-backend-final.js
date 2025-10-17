@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3001;
 
 // ROBUST CORS CONFIGURATION - Final Fix (Cleaned Up)
 const allowList = new Set([
-  'https://elegant-cascaron-c08585.netlify.app', // CURRENT Netlify URL
+  'https://flightstat-backend.vercel.app', // CURRENT Vercel URL
   'http://localhost:3000',
   'https://localhost:3000'
 ]);
