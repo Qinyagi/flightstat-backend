@@ -8,15 +8,9 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// ROBUST CORS CONFIGURATION - Final Fix
+// ROBUST CORS CONFIGURATION - Final Fix (Cleaned Up)
 const allowList = new Set([
-  'https://remarkable-bubblegum-9bae5e.netlify.app',
-  'https://genuine-treacle-94862a.netlify.app',
-  'https://sensational-entremet-00d330.netlify.app',
-  'https://gentle-starship-f7e194.netlify.app',
-  'https://grand-nasturtium-d134ae.netlify.app',
-  'https://tourmaline-rugelach-ecc573.netlify.app',
-  'https://courageous-gnome-18ce7b.netlify.app',
+  'https://remarkable-bubblegum-9bae5e.netlify.app', // Current Netlify URL
   'http://localhost:3000',
   'https://localhost:3000'
 ]);
