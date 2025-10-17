@@ -1,21 +1,21 @@
 {
-  "name": "flightstat-backend",
-  "version": "1.0.0",
-  "description": "FlightStat Bot 2025 - Railway Backend API Proxy",
-  "main": "server.js",
+  "name": "flightstat-railway-backend",
+  "version": "1.6.0",
+  "description": "FlightStat Bot Railway Backend - CHATGPT 5 FINAL FIX",
+  "main": "railway-backend-final.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node railway-backend-final.js",
+    "dev": "node railway-backend-final.js"
   },
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.6.7"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=16.0.0"
   },
-  "keywords": ["flightaware", "api", "proxy", "railway"],
-  "author": "FlightStat Team",
+  "keywords": ["flightstat", "railway", "api", "proxy", "flightaware"],
+  "author": "FlightStat Bot",
   "license": "MIT"
 }
