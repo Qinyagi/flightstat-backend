@@ -408,16 +408,30 @@ app.get('/api/flights', async (req, res) => {
         }
         
         return {
-          flight: flight.ident || 'N/A',
-          airline: flight.operator || 'Unknown',
-          origin: flight.origin?.code || 'N/A',
-          destination: flight.destination?.code || airport,
-          scheduled: scheduledTime ? scheduledTime.toISOString() : null,
-          estimated: estimatedTime ? estimatedTime.toISOString() : null,
-          actual: actualTime ? actualTime.toISOString() : null,
+          id: flight.fa_flight_id || `flight-${Math.random()}`,
+          ident: flight.ident || 'N/A',
+          callsign: flight.ident || 'N/A', 
+          operator: flight.operator || 'Unknown',
+          operator_iata: flight.operator_iata || 'XX',
+          aircraft_type: flight.aircraft_type || 'N/A',
+          registration: flight.registration || 'N/A',
+          origin: {
+            code: flight.origin?.code_iata || flight.origin?.code_icao || 'XXX',
+            name: flight.origin?.name || 'Unknown Airport',
+            city: flight.origin?.city || 'Unknown'
+          },
+          destination: {
+            code: airport,
+            name: 'Cologne Bonn Airport',
+            city: 'Cologne'
+          },
+          scheduled_in: scheduledTime ? scheduledTime.toISOString() : null,
+          estimated_in: estimatedTime ? estimatedTime.toISOString() : null,
+          actual_in: actualTime ? actualTime.toISOString() : null,
           status: status,
-          aircraft: flight.aircraft_type || 'N/A',
-          type: type
+          progress_percent: flight.progress_percent || (status === 'LANDED' ? 100 : 0),
+          isMonitored: false,
+          isNewOrUpdated: false
         };
       });
     };
