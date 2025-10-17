@@ -438,7 +438,14 @@ app.get('/api/flights', async (req, res) => {
     
     const arrivedFlights = processFlights(arrived, 'arrivals');
     const futureFlights = processFlights(future, 'scheduled');
-    const flights = [...arrivedFlights, ...futureFlights];
+    const allFlights = [...arrivedFlights, ...futureFlights];
+    
+    // FILTER: Only EN ROUTE flights (exclude LANDED)
+    const flights = allFlights.filter(flight => 
+      flight.status === 'EN ROUTE' || 
+      flight.status === 'SCHEDULED' || 
+      flight.status === 'DELAYED'
+    );
 
     return res.json({ 
       success: true, 
