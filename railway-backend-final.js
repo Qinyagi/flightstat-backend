@@ -1,5 +1,6 @@
-// FlightStat Bot 2025 - Railway Backend Server - FINAL CHATGPT 5 FIX
+// FlightStat Bot 2025 - Railway Backend Server - CHATGPT ULTIMATE FIX
 // API Proxy for FlightAware to bypass CORS restrictions
+// SOLUTION: Dual endpoint approach (arrivals + scheduled_arrivals)
 
 const express = require('express');
 const cors = require('cors');
@@ -46,12 +47,16 @@ app.use(express.json());
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
-    status: 'FlightStat Backend API is running! 🚀 CHATGPT 5 FINAL FIX',
-    version: '1.6.0',
+    status: 'FlightStat Backend API is running! 🚀 CHATGPT ULTIMATE FIX - Dual Endpoint Solution',
+    version: '1.7.0',
     timestamp: new Date().toISOString(),
     environment: {
       hasApiKey: !!process.env.AEROAPI_KEY,
       port: PORT
+    },
+    endpoints: {
+      arrivals: 'Past flights (landed)',
+      scheduled_arrivals: 'Future flights (en route)'
     }
   });
 });
@@ -59,16 +64,18 @@ app.get('/health', (req, res) => {
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
-    message: 'FlightStat Bot Railway Backend - CHATGPT 5 FINAL FIX',
-    version: '1.6.0',
+    message: 'FlightStat Bot Railway Backend - CHATGPT ULTIMATE FIX',
+    version: '1.7.0',
+    fix: 'Dual endpoint solution: arrivals (past) + scheduled_arrivals (future)',
     endpoints: {
       health: '/health',
-      flights: '/api/flights?airport=ICAO&user=username'
+      flights: '/api/flights?airport=ICAO&user=username',
+      debug: '/api/flights?airport=ICAO&user=username&debug=true'
     }
   });
 });
 
-// FlightAware API Proxy endpoint - CHATGPT 5 FINAL FIX
+// FlightAware API Proxy endpoint - CHATGPT ULTIMATE FIX
 app.get('/api/flights', async (req, res) => {
   const airport = (req.query.airport || '').toString().toUpperCase();
   const user = req.query.user || 'unknown';
@@ -112,92 +119,117 @@ app.get('/api/flights', async (req, res) => {
   }
 
   try {
-    // Calculate time range (last 12 hours to next 12 hours)
     const now = new Date();
-    const start = new Date(now.getTime() - 12 * 60 * 60 * 1000);
-    const end = new Date(now.getTime() + 12 * 60 * 60 * 1000);
+    // Split time windows correctly per ChatGPT recommendation
+    const wantStart = new Date(now.getTime() - 12 * 60 * 60 * 1000); // -12h
+    const wantEnd = new Date(now.getTime() + 12 * 60 * 60 * 1000);   // +12h
     
-    const startTime = start.toISOString();
-    const endTime = end.toISOString();
+    // Part A: actual arrivals (past flights) - end capped at now
+    const arrStart = wantStart;
+    const arrEnd = now; // CRITICAL: never future for arrivals endpoint
     
-    console.log(`🕐 Time Range: ${startTime} to ${endTime}`);
+    // Part B: scheduled arrivals (future flights) - from now onwards
+    const schedStart = now;
+    const schedEnd = wantEnd;
     
-    // FlightAware AeroAPI v4 endpoint
-    const flightAwareUrl = `https://aeroapi.flightaware.com/aeroapi/airports/${airport}/flights/arrivals?start=${startTime}&end=${endTime}`;
+    console.log(`🕐 Arrivals Range: ${arrStart.toISOString()} to ${arrEnd.toISOString()}`);
+    console.log(`🕐 Scheduled Range: ${schedStart.toISOString()} to ${schedEnd.toISOString()}`);
     
-    console.log(`🌐 FlightAware Request: ${flightAwareUrl}`);
+    const base = 'https://aeroapi.flightaware.com/aeroapi';
+    const headers = { 
+      'x-apikey': key, 
+      'Accept': 'application/json; charset=UTF-8' 
+    };
     
-    const response = await fetch(flightAwareUrl, {
-      method: 'GET',
-      headers: {
-        'x-apikey': key,
-        'Accept': 'application/json'
+    // Two separate API calls as recommended by ChatGPT
+    const urls = [
+      `${base}/airports/${airport}/flights/arrivals?start=${arrStart.toISOString()}&end=${arrEnd.toISOString()}&max_pages=3`,
+      `${base}/airports/${airport}/flights/scheduled_arrivals?start=${schedStart.toISOString()}&end=${schedEnd.toISOString()}&max_pages=3`
+    ];
+    
+    console.log(`🌐 FlightAware Requests:`);
+    console.log(`   Arrivals: ${urls[0]}`);
+    console.log(`   Scheduled: ${urls[1]}`);
+    
+    const [r1, r2] = await Promise.all(urls.map(u => fetch(u, { headers })));
+    
+    // Handle errors transparently as recommended
+    const pick = async (r) => {
+      if (r.ok) {
+        return r.json();
+      } else {
+        const errorBody = await r.text();
+        throw { status: r.status, body: errorBody };
       }
-    });
-
-    console.log(`📡 FlightAware Response: ${response.status} ${response.statusText}`);
+    };
     
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log(`❌ FlightAware Error: ${errorText}`);
-      
-      // Pass through the actual FlightAware error instead of masking as 500
-      return res.status(response.status).json({
-        error: 'FlightAware API Error',
-        status: response.status,
-        message: errorText,
-        source: 'FlightAware API via Railway Backend CHATGPT 5 FINAL FIX'
+    const [arrivals, scheduled] = await Promise.all([pick(r1), pick(r2)]);
+    
+    console.log(`📡 FlightAware Responses:`);
+    console.log(`   Arrivals: ${arrivals?.arrivals?.length || 0} flights`);
+    console.log(`   Scheduled: ${scheduled?.scheduled_arrivals?.length || 0} flights`);
+    
+    // Extract flights from API responses
+    const arrived = Array.isArray(arrivals?.arrivals) ? arrivals.arrivals : (arrivals?.flights || []);
+    const future = Array.isArray(scheduled?.scheduled_arrivals) ? scheduled.scheduled_arrivals : (scheduled?.flights || []);
+    
+    // Process and format all flight data
+    const processFlights = (flights, type) => {
+      return flights.map(flight => {
+        const scheduledTime = flight.scheduled_in ? new Date(flight.scheduled_in) : null;
+        const actualTime = flight.actual_in ? new Date(flight.actual_in) : null;
+        const estimatedTime = flight.estimated_in ? new Date(flight.estimated_in) : null;
+        
+        // Determine flight status
+        let status = 'UNKNOWN';
+        if (actualTime) {
+          status = 'LANDED';
+        } else if (estimatedTime) {
+          const now = new Date();
+          if (estimatedTime > now) {
+            status = 'EN ROUTE';
+          } else {
+            status = 'DELAYED';
+          }
+        } else if (scheduledTime) {
+          const now = new Date();
+          if (scheduledTime > now) {
+            status = 'SCHEDULED';
+          } else {
+            status = 'DELAYED';
+          }
+        }
+        
+        return {
+          flight: flight.ident || 'N/A',
+          airline: flight.operator || 'Unknown',
+          origin: flight.origin?.code || 'N/A',
+          destination: flight.destination?.code || airport,
+          scheduled: scheduledTime ? scheduledTime.toISOString() : null,
+          estimated: estimatedTime ? estimatedTime.toISOString() : null,
+          actual: actualTime ? actualTime.toISOString() : null,
+          status: status,
+          aircraft: flight.aircraft_type || 'N/A',
+          type: type // Track which endpoint this came from
+        };
       });
-    }
-
-    const data = await response.json();
-    console.log(`✅ FlightAware Success: ${data.arrivals?.length || 0} flights received`);
+    };
     
-    // Process and format the flight data
-    const processedFlights = (data.arrivals || []).map(flight => {
-      const scheduledTime = flight.scheduled_in ? new Date(flight.scheduled_in) : null;
-      const actualTime = flight.actual_in ? new Date(flight.actual_in) : null;
-      const estimatedTime = flight.estimated_in ? new Date(flight.estimated_in) : null;
-      
-      // Determine flight status
-      let status = 'UNKNOWN';
-      if (actualTime) {
-        status = 'LANDED';
-      } else if (estimatedTime) {
-        const now = new Date();
-        if (estimatedTime > now) {
-          status = 'EN ROUTE';
-        } else {
-          status = 'DELAYED';
-        }
-      } else if (scheduledTime) {
-        const now = new Date();
-        if (scheduledTime > now) {
-          status = 'SCHEDULED';
-        } else {
-          status = 'DELAYED';
-        }
-      }
-      
-      return {
-        flight: flight.ident || 'N/A',
-        airline: flight.operator || 'Unknown',
-        origin: flight.origin?.code || 'N/A',
-        destination: flight.destination?.code || airport,
-        scheduled: scheduledTime ? scheduledTime.toISOString() : null,
-        estimated: estimatedTime ? estimatedTime.toISOString() : null,
-        actual: actualTime ? actualTime.toISOString() : null,
-        status: status,
-        aircraft: flight.aircraft_type || 'N/A'
-      };
-    });
-
+    const arrivedFlights = processFlights(arrived, 'arrivals');
+    const futureFlights = processFlights(future, 'scheduled');
+    const allFlights = [...arrivedFlights, ...futureFlights];
+    
+    console.log(`✅ FlightAware Success: ${allFlights.length} total flights (${arrivedFlights.length} arrived + ${futureFlights.length} scheduled)`);
+    
     // Return formatted response
     res.json({
-      flights: processedFlights,
+      success: true,
+      flights: allFlights,
       meta: {
-        total: processedFlights.length,
-        source: 'FlightAware API via Railway Backend CHATGPT 5 FINAL FIX',
+        total: allFlights.length,
+        arrived: arrivedFlights.length,
+        scheduled: futureFlights.length,
+        source: 'AeroAPI (arrivals + scheduled_arrivals) - CHATGPT ULTIMATE FIX',
         airport: airport,
         user: user,
         timestamp: new Date().toISOString()
@@ -206,10 +238,17 @@ app.get('/api/flights', async (req, res) => {
 
   } catch (error) {
     console.error('💥 Server Error:', error);
-    res.status(500).json({
-      error: 'Internal server error',
-      message: error.message,
-      source: 'Railway Backend CHATGPT 5 FINAL FIX'
+    
+    // Pass through upstream errors with original status
+    const status = error?.status || 502;
+    res.status(status).json({
+      success: false,
+      source: 'AeroAPI',
+      status: status,
+      message: error?.body || String(error),
+      airport: airport,
+      user: user,
+      timestamp: new Date().toISOString()
     });
   }
 });
