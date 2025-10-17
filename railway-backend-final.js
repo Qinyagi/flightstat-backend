@@ -11,7 +11,8 @@ const PORT = process.env.PORT || 3001;
 
 // ROBUST CORS CONFIGURATION - Final Fix (Cleaned Up)
 const allowList = new Set([
-  'https://remarkable-bubblegum-9bae5e.netlify.app', // Current Netlify URL
+  'https://remarkable-bubblegum-9bae5e.netlify.app', // Old Netlify URL
+  'https://eclectic-brioche-42b640.netlify.app', // Current Netlify URL
   'http://localhost:3000',
   'https://localhost:3000'
 ]);
@@ -75,7 +76,210 @@ app.get('/', (req, res) => {
   });
 });
 
-// FlightAware API Proxy endpoint - CHATGPT HOTFIX (ISO Format Fix)
+// Arrivals endpoint (past flights)
+app.get('/arrivals/:airport', async (req, res) => {
+  const airport = req.params.airport.toUpperCase();
+  const user = req.query.user || 'unknown';
+  const key = process.env.AEROAPI_KEY;
+
+  console.log(`🛩️  Arrivals Request: airport=${airport}, user=${user}`);
+
+  if (!key) {
+    return res.status(500).json({
+      success: false,
+      error: 'Server missing AEROAPI_KEY environment variable'
+    });
+  }
+
+  const now = new Date();
+  const startTime = new Date(now.getTime() - 12 * 60 * 60 * 1000); // 12 hours ago
+  const endTime = now;
+  
+  const formatForFlightAware = (date) => {
+    return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  };
+
+  const flightAwareUrl = `https://aeroapi.flightaware.com/aeroapi/airports/${airport}/flights/arrivals?start=${formatForFlightAware(startTime)}&end=${formatForFlightAware(endTime)}&max_pages=3`;
+  
+  try {
+    const response = await fetch(flightAwareUrl, {
+      headers: {
+        'x-apikey': key,
+        'Accept': 'application/json; charset=UTF-8',
+        'User-Agent': 'FlightStat-Bot-2025/1.0'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error(`❌ FlightAware API Error: ${response.status}`);
+      return res.status(response.status).json({
+        success: false,
+        error: 'FlightAware API error',
+        detail: errorData
+      });
+    }
+
+    const data = await response.json();
+    const processedFlights = (data.arrivals || [])
+      .filter(flight => {
+        const status = flight.status?.toLowerCase() || '';
+        return status.includes('arrived') || status.includes('landed');
+      })
+      .slice(0, 50)
+      .map((flight, index) => ({
+        id: flight.fa_flight_id || `flight-${index}`,
+        ident: flight.ident || 'Unknown',
+        callsign: flight.ident || 'Unknown',
+        registration: flight.registration || 'N/A',
+        aircraft_type: flight.aircraft_type || 'Unknown',
+        operator: flight.operator || 'Unknown',
+        operator_iata: flight.operator_iata || 'XX',
+        origin: {
+          code: flight.origin?.code_iata || flight.origin?.code_icao || 'XXX',
+          name: flight.origin?.name || 'Unknown Airport',
+          city: flight.origin?.city || 'Unknown'
+        },
+        scheduled_in: flight.scheduled_in,
+        estimated_in: flight.estimated_in,
+        actual_in: flight.actual_in,
+        status: flight.status || 'Unknown',
+        progress_percent: 100,
+        isMonitored: false,
+        isNewOrUpdated: false
+      }));
+
+    console.log(`✅ Arrivals Success: ${processedFlights.length} flights for ${airport}`);
+
+    return res.json({
+      success: true,
+      flights: processedFlights,
+      airport: airport,
+      timestamp: new Date().toISOString(),
+      meta: {
+        total: processedFlights.length,
+        source: 'FlightAware API - Arrivals',
+        user: user
+      }
+    });
+
+  } catch (error) {
+    console.error('💥 Arrivals Error:', error);
+    return res.status(502).json({
+      success: false,
+      error: 'Network error',
+      detail: error.message
+    });
+  }
+});
+
+// Scheduled arrivals endpoint (future flights)
+app.get('/scheduled_arrivals/:airport', async (req, res) => {
+  const airport = req.params.airport.toUpperCase();
+  const user = req.query.user || 'unknown';
+  const key = process.env.AEROAPI_KEY;
+
+  console.log(`🛩️  Scheduled Arrivals Request: airport=${airport}, user=${user}`);
+
+  if (!key) {
+    return res.status(500).json({
+      success: false,
+      error: 'Server missing AEROAPI_KEY environment variable'
+    });
+  }
+
+  const now = new Date();
+  const startTime = now;
+  const endTime = new Date(now.getTime() + 12 * 60 * 60 * 1000); // 12 hours from now
+  
+  const formatForFlightAware = (date) => {
+    return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  };
+
+  const flightAwareUrl = `https://aeroapi.flightaware.com/aeroapi/airports/${airport}/flights/arrivals?start=${formatForFlightAware(startTime)}&end=${formatForFlightAware(endTime)}&max_pages=3`;
+  
+  try {
+    const response = await fetch(flightAwareUrl, {
+      headers: {
+        'x-apikey': key,
+        'Accept': 'application/json; charset=UTF-8',
+        'User-Agent': 'FlightStat-Bot-2025/1.0'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error(`❌ FlightAware API Error: ${response.status}`);
+      return res.status(response.status).json({
+        success: false,
+        error: 'FlightAware API error',
+        detail: errorData
+      });
+    }
+
+    const data = await response.json();
+    const processedFlights = (data.arrivals || [])
+      .filter(flight => {
+        const status = flight.status?.toLowerCase() || '';
+        return status.includes('en route') || 
+               status.includes('approach') || 
+               status.includes('final') ||
+               status.includes('scheduled') ||
+               status.includes('departed') ||
+               status.includes('airborne') ||
+               status.includes('climbing') ||
+               status.includes('cruising') ||
+               status.includes('descending') ||
+               status.includes('diverted');
+      })
+      .slice(0, 50)
+      .map((flight, index) => ({
+        id: flight.fa_flight_id || `flight-${index}`,
+        ident: flight.ident || 'Unknown',
+        callsign: flight.ident || 'Unknown',
+        registration: flight.registration || 'N/A',
+        aircraft_type: flight.aircraft_type || 'Unknown',
+        operator: flight.operator || 'Unknown',
+        operator_iata: flight.operator_iata || 'XX',
+        origin: {
+          code: flight.origin?.code_iata || flight.origin?.code_icao || 'XXX',
+          name: flight.origin?.name || 'Unknown Airport',
+          city: flight.origin?.city || 'Unknown'
+        },
+        scheduled_in: flight.scheduled_in,
+        estimated_in: flight.estimated_in,
+        actual_in: flight.actual_in,
+        status: flight.status || 'Unknown',
+        progress_percent: flight.progress_percent || 0,
+        isMonitored: false,
+        isNewOrUpdated: false
+      }));
+
+    console.log(`✅ Scheduled Arrivals Success: ${processedFlights.length} flights for ${airport}`);
+
+    return res.json({
+      success: true,
+      flights: processedFlights,
+      airport: airport,
+      timestamp: new Date().toISOString(),
+      meta: {
+        total: processedFlights.length,
+        source: 'FlightAware API - Scheduled Arrivals',
+        user: user
+      }
+    });
+
+  } catch (error) {
+    console.error('💥 Scheduled Arrivals Error:', error);
+    return res.status(502).json({
+      success: false,
+      error: 'Network error',
+      detail: error.message
+    });
+  }
+});
+
+// FlightAware API Proxy endpoint - CHATGPT HOTFIX (ISO Format Fix) - Legacy Support
 app.get('/api/flights', async (req, res) => {
   const airport = (req.query.airport || '').toString().toUpperCase();
   const user = req.query.user || 'unknown';
