@@ -1,6 +1,6 @@
-// FlightStat Bot 2025 - Railway Backend Server - CHATGPT ULTIMATE FIX
+// FlightStat Bot 2025 - Railway Backend Server - CHATGPT HOTFIX
 // API Proxy for FlightAware to bypass CORS restrictions
-// SOLUTION: Dual endpoint approach (arrivals + scheduled_arrivals)
+// SOLUTION: Time window validation + AeroAPI spec compliance
 
 const express = require('express');
 const cors = require('cors');
@@ -47,8 +47,8 @@ app.use(express.json());
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
-    status: 'FlightStat Backend API is running! 🚀 CHATGPT ULTIMATE FIX - Dual Endpoint Solution',
-    version: '1.7.0',
+    status: 'FlightStat Backend API is running! 🚀 CHATGPT HOTFIX - Time Window Validation',
+    version: '1.8.0',
     timestamp: new Date().toISOString(),
     environment: {
       hasApiKey: !!process.env.AEROAPI_KEY,
@@ -64,9 +64,9 @@ app.get('/health', (req, res) => {
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
-    message: 'FlightStat Bot Railway Backend - CHATGPT ULTIMATE FIX',
-    version: '1.7.0',
-    fix: 'Dual endpoint solution: arrivals (past) + scheduled_arrivals (future)',
+    message: 'FlightStat Bot Railway Backend - CHATGPT HOTFIX',
+    version: '1.8.0',
+    fix: 'Time window validation: proper start<end ordering + AeroAPI spec compliance',
     endpoints: {
       health: '/health',
       flights: '/api/flights?airport=ICAO&user=username',
@@ -75,15 +75,13 @@ app.get('/', (req, res) => {
   });
 });
 
-// FlightAware API Proxy endpoint - CHATGPT ULTIMATE FIX
+// FlightAware API Proxy endpoint - CHATGPT HOTFIX (Time Window Validation)
 app.get('/api/flights', async (req, res) => {
   const airport = (req.query.airport || '').toString().toUpperCase();
   const user = req.query.user || 'unknown';
-  const key = process.env.AEROAPI_KEY; // ← Secret from Railway Environment
+  const key = process.env.AEROAPI_KEY;
   
   console.log(`🛩️  Flight Request: airport=${airport}, user=${user}, hasKey=${!!key}`);
-  console.log(`🔍 DEBUG: req.query =`, req.query);
-  console.log(`🔍 DEBUG: airport length = ${airport.length}`);
   
   // DEBUG: Return debug info first
   if (req.query.debug === 'true') {
@@ -97,81 +95,81 @@ app.get('/api/flights', async (req, res) => {
     });
   }
   
-  // Validate required parameters
-  if (!airport) {
-    console.log('❌ Missing airport parameter');
-    return res.status(400).json({
-      error: 'Missing required parameter: airport (ICAO code)',
-      example: '/api/flights?airport=EDDK&user=testuser',
-      received: {
-        airport: airport,
-        query: req.query
-      }
-    });
-  }
+  if (!airport) return res.status(400).json({ error: 'Missing airport' });
+  if (!key) return res.status(500).json({ error: 'Missing AEROAPI_KEY' });
 
-  if (!key) {
-    console.log('❌ Missing AEROAPI_KEY environment variable');
-    return res.status(500).json({
-      error: 'Server configuration error: Missing FlightAware API key',
-      message: 'AEROAPI_KEY environment variable not set'
-    });
-  }
+  const now = new Date();
+  const wantStart = new Date(now.getTime() - 12*60*60*1000); // -12h
+  const wantEnd   = new Date(now.getTime() + 12*60*60*1000); // +12h
+
+  // ✨ 1) Fenster mathematisch korrekt machen (ChatGPT Hotfix)
+  const clamp = (d) => new Date(Math.min(
+    // +2 Tage: upper bound laut Spec
+    now.getTime() + 2*24*60*60*1000,
+    Math.max(
+      // -10 Tage: lower bound laut Spec
+      now.getTime() - 10*24*60*60*1000,
+      d.getTime()
+    )
+  ));
+
+  // Arrivals: end niemals in der Zukunft
+  const arrStart = clamp(wantStart);
+  const arrEnd   = clamp(now);        // ← capped at now
+
+  // Scheduled Arrivals: Zukunft ab jetzt
+  const schedStart = clamp(new Date(now)); // ab jetzt
+  const schedEnd   = clamp(wantEnd);
+
+  // ✨ 2) Start < End sicherstellen (sonst 400)
+  const ensureOrder = (s, e) => (s < e) ? [s, e] : [new Date(e), new Date(new Date(e).getTime() + 60*1000)];
+  const [aS, aE] = ensureOrder(arrStart, arrEnd);
+  const [sS, sE] = ensureOrder(schedStart, schedEnd);
+
+  console.log(`🕐 Arrivals Range (Fixed): ${aS.toISOString()} to ${aE.toISOString()}`);
+  console.log(`🕐 Scheduled Range (Fixed): ${sS.toISOString()} to ${sE.toISOString()}`);
+
+  const base = 'https://aeroapi.flightaware.com/aeroapi';
+  const H = { 'x-apikey': key, 'Accept': 'application/json; charset=UTF-8' };
+
+  const urls = [
+    `${base}/airports/${airport}/flights/arrivals?start=${aS.toISOString()}&end=${aE.toISOString()}&max_pages=3`,
+    `${base}/airports/${airport}/flights/scheduled_arrivals?start=${sS.toISOString()}&end=${sE.toISOString()}&max_pages=3`
+  ];
+
+  console.log(`🌐 FlightAware Requests (Hotfix):`);
+  console.log(`   Arrivals: ${urls[0]}`);
+  console.log(`   Scheduled: ${urls[1]}`);
+
+  // Hilfsleser für Fehlerkörper nach Spec: {title, reason, detail, status}
+  const read = async (r) => {
+    const txt = await r.text();
+    try { return [r.status, JSON.parse(txt)]; } catch { return [r.status, { detail: txt }]; }
+  };
 
   try {
-    const now = new Date();
-    // Split time windows correctly per ChatGPT recommendation
-    const wantStart = new Date(now.getTime() - 12 * 60 * 60 * 1000); // -12h
-    const wantEnd = new Date(now.getTime() + 12 * 60 * 60 * 1000);   // +12h
+    const [r1, r2] = await Promise.all(urls.map(u => fetch(u, { headers: H })));
     
-    // Part A: actual arrivals (past flights) - end capped at now
-    const arrStart = wantStart;
-    const arrEnd = now; // CRITICAL: never future for arrivals endpoint
+    if (!r1.ok || !r2.ok) {
+      const [s1,b1] = await read(r1);
+      const [s2,b2] = await read(r2);
+      // Gib den „schlimmeren" Status zurück und zeige BEIDE Bodies
+      const pick = (s,b,u) => ({ endpoint: u, status: s, ...b });
+      console.log(`❌ FlightAware Errors: ${s1}/${s2}`);
+      console.log(`   Arrivals Error:`, b1);
+      console.log(`   Scheduled Error:`, b2);
+      return res.status(Math.max(s1,s2)).json({
+        success: false,
+        source: 'AeroAPI - CHATGPT HOTFIX',
+        errors: [ pick(r1.status, b1, 'arrivals'), pick(r2.status, b2, 'scheduled_arrivals') ]
+      });
+    }
     
-    // Part B: scheduled arrivals (future flights) - from now onwards
-    const schedStart = now;
-    const schedEnd = wantEnd;
+    const [arrivals, scheduled] = await Promise.all([r1.json(), r2.json()]);
+    const arrived  = Array.isArray(arrivals?.arrivals) ? arrivals.arrivals : (arrivals?.flights || []);
+    const future   = Array.isArray(scheduled?.scheduled_arrivals) ? scheduled.scheduled_arrivals : (scheduled?.flights || []);
     
-    console.log(`🕐 Arrivals Range: ${arrStart.toISOString()} to ${arrEnd.toISOString()}`);
-    console.log(`🕐 Scheduled Range: ${schedStart.toISOString()} to ${schedEnd.toISOString()}`);
-    
-    const base = 'https://aeroapi.flightaware.com/aeroapi';
-    const headers = { 
-      'x-apikey': key, 
-      'Accept': 'application/json; charset=UTF-8' 
-    };
-    
-    // Two separate API calls as recommended by ChatGPT
-    const urls = [
-      `${base}/airports/${airport}/flights/arrivals?start=${arrStart.toISOString()}&end=${arrEnd.toISOString()}&max_pages=3`,
-      `${base}/airports/${airport}/flights/scheduled_arrivals?start=${schedStart.toISOString()}&end=${schedEnd.toISOString()}&max_pages=3`
-    ];
-    
-    console.log(`🌐 FlightAware Requests:`);
-    console.log(`   Arrivals: ${urls[0]}`);
-    console.log(`   Scheduled: ${urls[1]}`);
-    
-    const [r1, r2] = await Promise.all(urls.map(u => fetch(u, { headers })));
-    
-    // Handle errors transparently as recommended
-    const pick = async (r) => {
-      if (r.ok) {
-        return r.json();
-      } else {
-        const errorBody = await r.text();
-        throw { status: r.status, body: errorBody };
-      }
-    };
-    
-    const [arrivals, scheduled] = await Promise.all([pick(r1), pick(r2)]);
-    
-    console.log(`📡 FlightAware Responses:`);
-    console.log(`   Arrivals: ${arrivals?.arrivals?.length || 0} flights`);
-    console.log(`   Scheduled: ${scheduled?.scheduled_arrivals?.length || 0} flights`);
-    
-    // Extract flights from API responses
-    const arrived = Array.isArray(arrivals?.arrivals) ? arrivals.arrivals : (arrivals?.flights || []);
-    const future = Array.isArray(scheduled?.scheduled_arrivals) ? scheduled.scheduled_arrivals : (scheduled?.flights || []);
+    console.log(`📡 FlightAware Success: ${arrived.length} arrived + ${future.length} scheduled`);
     
     // Process and format all flight data
     const processFlights = (flights, type) => {
@@ -210,45 +208,36 @@ app.get('/api/flights', async (req, res) => {
           actual: actualTime ? actualTime.toISOString() : null,
           status: status,
           aircraft: flight.aircraft_type || 'N/A',
-          type: type // Track which endpoint this came from
+          type: type
         };
       });
     };
     
     const arrivedFlights = processFlights(arrived, 'arrivals');
     const futureFlights = processFlights(future, 'scheduled');
-    const allFlights = [...arrivedFlights, ...futureFlights];
-    
-    console.log(`✅ FlightAware Success: ${allFlights.length} total flights (${arrivedFlights.length} arrived + ${futureFlights.length} scheduled)`);
-    
-    // Return formatted response
-    res.json({
-      success: true,
-      flights: allFlights,
+    const flights = [...arrivedFlights, ...futureFlights];
+
+    return res.json({ 
+      success: true, 
+      flights, 
       meta: {
-        total: allFlights.length,
+        total: flights.length, 
         arrived: arrivedFlights.length,
         scheduled: futureFlights.length,
-        source: 'AeroAPI (arrivals + scheduled_arrivals) - CHATGPT ULTIMATE FIX',
-        airport: airport,
-        user: user,
+        airport, 
+        source: 'AeroAPI (arrivals+scheduled_arrivals) - CHATGPT HOTFIX', 
+        user,
         timestamp: new Date().toISOString()
       }
     });
-
-  } catch (error) {
-    console.error('💥 Server Error:', error);
     
-    // Pass through upstream errors with original status
-    const status = error?.status || 502;
-    res.status(status).json({
-      success: false,
-      source: 'AeroAPI',
-      status: status,
-      message: error?.body || String(error),
-      airport: airport,
-      user: user,
-      timestamp: new Date().toISOString()
+  } catch (e) {
+    console.error('💥 Server Error:', e);
+    return res.status(502).json({ 
+      success: false, 
+      error: 'Upstream fetch failed', 
+      detail: String(e),
+      source: 'CHATGPT HOTFIX'
     });
   }
 });
