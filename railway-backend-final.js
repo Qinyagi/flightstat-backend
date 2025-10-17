@@ -12,7 +12,8 @@ const PORT = process.env.PORT || 3001;
 // ROBUST CORS CONFIGURATION - Final Fix (Cleaned Up)
 const allowList = new Set([
   'https://remarkable-bubblegum-9bae5e.netlify.app', // Old Netlify URL
-  'https://eclectic-brioche-42b640.netlify.app', // Current Netlify URL
+  'https://eclectic-brioche-42b640.netlify.app', // Previous Netlify URL
+  'https://taupe-pithivier-e2f13f.netlify.app', // CURRENT Netlify URL
   'http://localhost:3000',
   'https://localhost:3000'
 ]);
