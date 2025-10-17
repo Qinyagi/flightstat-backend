@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3001;
 
 // ROBUST CORS CONFIGURATION - Final Fix (Cleaned Up)
 const allowList = new Set([
-  'https://flightstat-backend.vercel.app', // CURRENT Vercel URL
+  'https://out-hxyue4ckc-hakans-projects-96ef8546.vercel.app', // CURRENT Vercel URL
   'http://localhost:3000',
   'https://localhost:3000'
 ]);
