@@ -12,7 +12,8 @@ const PORT = process.env.PORT || 3001;
 // ROBUST CORS CONFIGURATION - Final Fix (Cleaned Up)
 const allowList = new Set([
   'https://out-p3pyuojgj-hakans-projects-96ef8546.vercel.app', // OLD Vercel URL
-  'https://flightstat-fixed-fsct3i8kg-hakans-projects-96ef8546.vercel.app', // NEW Vercel URL - CORS FIX
+  'https://flightstat-fixed-fsct3i8kg-hakans-projects-96ef8546.vercel.app', // OLD Fixed URL
+  'https://flightstat-fixed25-9a23nyepy-hakans-projects-96ef8546.vercel.app', // NEW Fixed URL - CORS FIX
   'http://localhost:3000',
   'https://localhost:3000'
 ]);
