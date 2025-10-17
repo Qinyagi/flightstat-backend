@@ -93,46 +93,43 @@ app.get('/', (req, res) => {
   });
 });
 
-// FlightAware API Proxy endpoint
-app.get('/api/flights', async (req, res, next) => {
+// FlightAware API Proxy endpoint - CHATGPT 5 FIX
+app.get('/api/flights', async (req, res) => {
+  const airport = (req.query.airport || '').toString().toUpperCase();
+  const user = req.query.user || 'unknown';
+  const key = process.env.AEROAPI_KEY; // ← Secret aus Railway Environment
+
+  // Validate required parameters
+  if (!airport) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing airport parameter'
+    });
+  }
+
+  if (!key) {
+    return res.status(500).json({
+      success: false,
+      error: 'Server missing AEROAPI_KEY environment variable'
+    });
+  }
+
+  // Convert IATA to ICAO
+  const icaoCode = iataToIcao[airport] || airport;
+  console.log(`🔄 Converting ${airport} → ${icaoCode} (ICAO format for FlightAware)`);
+
+  // Build FlightAware API URL
+  const now = new Date();
+  const startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000);   // 6 hours ago
+  const endTime = new Date(now.getTime() + 12 * 60 * 60 * 1000);    // 12 hours from now
+  
+  const flightAwareUrl = `https://aeroapi.flightaware.com/aeroapi/airports/${icaoCode}/flights/arrivals?start=${startTime.toISOString()}&end=${endTime.toISOString()}&max_pages=3`;
+  
+  // Enhanced logging without key leak
+  const maskedKey = key ? key.slice(0,4) + '…' + key.slice(-4) : '';
+  console.log(`[AeroAPI] GET ${flightAwareUrl} user=${user} key=${maskedKey}`);
+
   try {
-    const airport = (req.query.airport || '').toString().toUpperCase();
-    const key = req.query.key; // In production: process.env.FLIGHTAWARE_API_KEY
-    const user = req.query.user || 'unknown';
-    
-    // Validate required parameters
-    if (!airport) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required parameters',
-        details: 'Airport parameter is required'
-      });
-    }
-
-    if (!key) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing API key',
-        details: 'FlightAware API key is required'
-      });
-    }
-
-    // Convert IATA to ICAO
-    const icaoCode = iataToIcao[airport] || airport;
-    console.log(`🔄 Converting ${airport} → ${icaoCode} (ICAO format for FlightAware)`);
-
-    // Log request (without exposing full API key)
-    const maskedKey = key.substring(0, 8) + '***' + key.substring(key.length - 4);
-    console.log(`🛫 Flight request: ${airport} (User: ${user}, Key: ${maskedKey})`);
-    console.log(`🔗 FlightAware URL: ${flightAwareUrl}`);
-
-    // Build FlightAware API URL
-    const now = new Date();
-    const startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000);   // 6 hours ago
-    const endTime = new Date(now.getTime() + 12 * 60 * 60 * 1000);    // 12 hours from now
-    
-    const flightAwareUrl = `https://aeroapi.flightaware.com/aeroapi/airports/${icaoCode}/flights/arrivals?start=${startTime.toISOString()}&end=${endTime.toISOString()}&max_pages=3`;
-    
     // Make request to FlightAware API
     const response = await fetch(flightAwareUrl, {
       headers: {
@@ -142,11 +139,26 @@ app.get('/api/flights', async (req, res, next) => {
       }
     });
 
+    console.log(`[AeroAPI] status=${response.status} ${response.statusText}`);
+
+    // CRITICAL FIX: Pass through real errors instead of masking as 500
     if (!response.ok) {
-      const errorText = await response.text();
+      let payload;
+      const txt = await response.text();
+      try { 
+        payload = JSON.parse(txt); 
+      } catch { 
+        payload = { detail: txt }; 
+      }
+      
       console.error(`❌ FlightAware API Error: ${response.status} ${response.statusText}`);
-      console.error(`❌ Error Details: ${errorText}`);
-      throw new Error(`FlightAware API error: ${response.status} ${response.statusText} - ${errorText}`);
+      console.error(`❌ Error Details:`, payload);
+      
+      return res.status(response.status).json({
+        success: false,
+        source: 'AeroAPI',
+        ...(typeof payload === 'object' ? payload : { detail: payload }),
+      });
     }
 
     const data = await response.json();
@@ -197,16 +209,22 @@ app.get('/api/flights', async (req, res, next) => {
       timestamp: new Date().toISOString(),
       meta: {
         total: processedFlights.length,
-        source: 'FlightAware API via Railway Backend CHATGPT FIX V2',
+        source: 'FlightAware API via Railway Backend CHATGPT 5 FIX',
         user: user
       }
     };
 
     console.log(`✅ Success: ${processedFlights.length} flights for ${airport}`);
-    res.json(result);
+    return res.json(result);
 
   } catch (error) {
-    next(error); // Let error handler deal with it
+    // Network/Fetch errors (DNS/TLS etc.)
+    console.error('❌ Network/Fetch Error:', error.message);
+    return res.status(502).json({
+      success: false,
+      error: 'Upstream fetch failed',
+      detail: String(error)
+    });
   }
 });
 
