@@ -10,16 +10,14 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // ROBUST CORS CONFIGURATION - Final Fix (Cleaned Up)
+// RATIONALIZED CORS - Automatic Vercel URL Support
 const allowList = new Set([
-  'https://out-p3pyuojgj-hakans-projects-96ef8546.vercel.app', // OLD Vercel URL
-  'https://flightstat-fixed-fsct3i8kg-hakans-projects-96ef8546.vercel.app', // OLD Fixed URL
-  'https://flightstat-fixed25-9a23nyepy-hakans-projects-96ef8546.vercel.app', // Fixed URL v1
-  'https://flightstat-fixed25-86891kbif-hakans-projects-96ef8546.vercel.app', // Fixed URL v2 - MODAL FIX
-  'https://out-modal-aqhdfxpkl-hakans-projects-96ef8546.vercel.app', // PERFECT MODAL CENTERING v1
-  'https://out-modal-bom8bu65u-hakans-projects-96ef8546.vercel.app', // PERFECT MODAL CENTERING v2
   'http://localhost:3000',
   'https://localhost:3000'
 ]);
+
+// Wildcard pattern for all your Vercel deployments
+const vercelPattern = /^https:\/\/.*-hakans-projects-96ef8546\.vercel\.app$/;
 
 const corsOptionsDelegate = (req, cb) => {
   const origin = req.header('Origin') || '';
@@ -27,8 +25,19 @@ const corsOptionsDelegate = (req, cb) => {
   console.log(`🌐 CORS Check: Origin="${origin}"`);
   
   let corsOptions;
+  // Check explicit allowList first
   if (allowList.has(origin)) {
-    console.log(`✅ CORS: Origin "${origin}" is allowed`);
+    console.log(`✅ CORS: Origin "${origin}" is explicitly allowed`);
+    corsOptions = { 
+      origin: true,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'x-apikey']
+    };
+  }
+  // Check Vercel pattern (automatic for all your deployments)
+  else if (vercelPattern.test(origin)) {
+    console.log(`✅ CORS: Origin "${origin}" matches Vercel pattern - AUTO ALLOWED`);
     corsOptions = { 
       origin: true,
       credentials: true,
